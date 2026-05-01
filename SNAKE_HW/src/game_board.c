@@ -109,9 +109,6 @@ int board_place_apple(game_board_t *board) {
 }
 
 int board_add_snake(game_board_t *board, int *out_id) {
-	(void)board;
-	(void)out_id;
-
 	if (!board || !out_id || !board->cells){
 		error("NULL argument passed into game_board/board_add_snake()");
 		return -1;
@@ -161,7 +158,7 @@ int board_add_snake(game_board_t *board, int *out_id) {
 			board->snakes[(*out_id)].body[0] = head_position;
 			empty_cell_exists = true;
 
-			board->cells[i] = 10 + (*out_id);	//update other board data
+			board->cells[i] = CELL_SNAKE_0 + (*out_id);	//update other board data
 			board->num_snakes++;
 		}
 	}
@@ -182,7 +179,7 @@ int board_remove_snake(game_board_t *board, int snake_id) {
 
 	//Clear board cells where snake existed
 	for (int i = 0; i < board->size * board->size; i++) {
-		if (board->cells[i] == snake_id + 10)
+		if (board->cells[i] == CELL_SNAKE_0 + snake_id)
 			board->cells[i] = CELL_EMPTY;
 	}
 	board->snakes[snake_id].alive = 0;
