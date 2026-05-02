@@ -171,6 +171,7 @@ int board_add_snake(game_board_t *board, int *out_id) {
 
 			board->cells[i] = CELL_SNAKE_0 + (*out_id);	//update other board data
 			board->num_snakes++;
+			break;
 		}
 	}
 
