@@ -39,6 +39,7 @@ int board_init(game_board_t *board, int size, int max_snakes, unsigned int seed)
 		board->snakes[i].length = 0;
 		board->snakes[i].id = i;
 	}
+	board->size = size;
 	board->num_snakes = 0;
 	board->rng_state = seed;
 
