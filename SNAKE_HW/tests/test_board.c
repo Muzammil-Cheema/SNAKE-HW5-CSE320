@@ -168,6 +168,7 @@ Test(board_suite, add_and_remove_snakes) {
 
 	ret = board_add_snake(&board, &snake_id0);
 	cr_assert_eq(ret, 0);
+	print_board_to_stderr(&board, "add_and_remove_snakes after first snake add");
 	cr_assert_eq(snake_id0, 0);
 	cr_assert_eq(board.num_snakes, 1);
 	cr_assert_eq(board.snakes[0].id, 0);
