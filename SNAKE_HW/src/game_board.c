@@ -189,6 +189,11 @@ int board_remove_snake(game_board_t *board, int snake_id) {
 		return -1;
 	}
 
+	if (board->snakes[snake_id].alive == 0) {
+		debug("snake is already removed in game_board/board_remove_snake()");
+		return -1;
+	}
+
 	//Clear board cells where snake existed
 	for (int i = 0; i < board->size * board->size; i++) {
 		if (board->cells[i] == (cell_t) (CELL_SNAKE_0 + snake_id))
