@@ -6,22 +6,22 @@
 int board_init(game_board_t *board, int size, int max_snakes, unsigned int seed) {
 	// Input validation
 	if (!board){
-		error("board pointer is NULL in game_board/board_init()");
+		debug("board pointer is NULL in game_board/board_init()");
 		return -1;
 	}
 	if (size < BOARD_SIZE_MIN || size > BOARD_SIZE_MAX) {
-		error("board size is invalid in game_board/board_init()");
+		debug("board size is invalid in game_board/board_init()");
 		return -1;
 	}
 	if (max_snakes < MAX_PLAYERS_MIN || max_snakes > MAX_PLAYERS_MAX) {
-		error("max_snakes is invalid in game_board/board_init()");
+		debug("max_snakes is invalid in game_board/board_init()");
 		return -1;
 	}
 
 	//Initialize cells
 	board->cells = calloc(size * size, sizeof(cell_t) * size * size);	//Use calloc to set all cells empty
 	if (!board->cells) {
-		error("malloc failed for cells array in game_board/board_init()");
+		debug("malloc failed for cells array in game_board/board_init()");
 		return -1;
 	}
 	for (int i = 0; i < size; i++)	//top row
@@ -43,23 +43,26 @@ int board_init(game_board_t *board, int size, int max_snakes, unsigned int seed)
 	board->rng_state = seed;
 
 	if (board_place_apple(board) != 0){
-		error("error thrown from game_baord/board_place_apple() to game_board/board_init()");
+		debug("error thrown from game_baord/board_place_apple() to game_board/board_init()");
 	}
 	return 0;
 }
 
 void board_free(game_board_t *board) {
-	if (board){
-		if (board->cells) free(board->cells);
-		free(board);	//TODO We are assuming board is malloced, not a global or stack variable
+	if (!board){
+		debug("board pointer is NULL in game_board/board_free()");
+		return;
 	}
+
+	if (board->cells) free(board->cells);
 	board->cells = NULL;
-	board = NULL;
+	board->num_snakes = 0;
+	board->size = 0;
 }
 
 unsigned int board_random(game_board_t *board) {
 	if (!board){
-		error("board pointer is NULL in game_board/board_init()");
+		debug("board pointer is NULL in game_board/board_init()");
 		return 50000;
 	}
 
@@ -69,7 +72,7 @@ unsigned int board_random(game_board_t *board) {
 
 int board_place_apple(game_board_t *board) {
 	if (!board){
-		error("board pointer is NULL in game_board/board_init()");
+		debug("board pointer is NULL in game_board/board_init()");
 		return -1;
 	}
 
@@ -83,7 +86,7 @@ int board_place_apple(game_board_t *board) {
 
 	unsigned int random = board_random(board);
 	if (random == 50000){
-		error("error thrown from game_board/board_random() to game_board/board_place_apple()");
+		debug("error thrown from game_board/board_random() to game_board/board_place_apple()");
 		return -1;
 	}
 
@@ -110,7 +113,7 @@ int board_place_apple(game_board_t *board) {
 
 int board_add_snake(game_board_t *board, int *out_id) {
 	if (!board || !out_id || !board->cells){
-		error("NULL argument passed into game_board/board_add_snake()");
+		debug("NULL argument passed into game_board/board_add_snake()");
 		return -1;
 	}
 
@@ -122,7 +125,7 @@ int board_add_snake(game_board_t *board, int *out_id) {
 		}
 	}
 	if (!found_snake) {
-		error("max snakes reached in game_board/board_add_snake()");
+		debug("max snakes reached in game_board/board_add_snake()");
 		return -1;
 	}
 
@@ -164,7 +167,7 @@ int board_add_snake(game_board_t *board, int *out_id) {
 	}
 
 	if (!empty_cell_exists) {
-		error("board is full error in game_board/board_add_snake()");
+		debug("board is full error in game_board/board_add_snake()");
 		return -1;
 	}
 
@@ -173,13 +176,13 @@ int board_add_snake(game_board_t *board, int *out_id) {
 
 int board_remove_snake(game_board_t *board, int snake_id) {
 	if (!board || snake_id >= board->num_snakes || snake_id < 0 || !board->cells){
-		error("invalid input in game_board/board_remove_snake()");
+		debug("invalid input in game_board/board_remove_snake()");
 		return -1;
 	}
 
 	//Clear board cells where snake existed
 	for (int i = 0; i < board->size * board->size; i++) {
-		if (board->cells[i] == CELL_SNAKE_0 + snake_id)
+		if (board->cells[i] == (cell_t) (CELL_SNAKE_0 + snake_id))
 			board->cells[i] = CELL_EMPTY;
 	}
 	board->snakes[snake_id].alive = 0;
@@ -191,7 +194,7 @@ int board_remove_snake(game_board_t *board, int snake_id) {
 
 int board_tick(game_board_t *board) {
 	if (!board){
-		error("board pointer is NULL in game_board/board_init()");
+		debug("board pointer is NULL in game_board/board_init()");
 		return -1;
 	}
 
@@ -199,11 +202,11 @@ int board_tick(game_board_t *board) {
 		if (board->snakes[i].alive){
 			int ret = -2;
 			if ((ret = snake_advance(board, i)) == -1){
-				error("error thrown from snake/snake_advance() to game_board/board_tick()");
+				debug("error thrown from snake/snake_advance() to game_board/board_tick()");
 				return -1;
 			}
 			else {
-				info("snake %d %s", board->snakes[i].id, ret == 0 ? " is alive and well" : (ret == 1 ? "snake just disintegrated bruz" : "snake has big belly"));
+				debug("snake %d %s", board->snakes[i].id, ret == 0 ? " is alive and well" : (ret == 1 ? "snake just disintegrated bruz" : "snake has big belly"));
 			}
 		}
 	}

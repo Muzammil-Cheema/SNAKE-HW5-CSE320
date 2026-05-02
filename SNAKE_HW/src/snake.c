@@ -6,17 +6,17 @@
 int _snake_grow(struct game_board * board, int snake_id, position_t *new_head) {
 	// Input vaidation
 	if (!board || !board->cells || !new_head){
-		error("NULL pointer passed to snake/_snake_grow()");
+		debug("NULL pointer passed to snake/_snake_grow()");
 		return -1;
 	}
 	if (snake_id < 0 || snake_id > board->max_snakes){
-		error("Invalid snake_id passed into snake/_snake_grow()");
+		debug("Invalid snake_id passed into snake/_snake_grow()");
 		return -1;
 	}
 
 	snake_t *snake = &board->snakes[snake_id];
 	if (snake->length == MAX_SNAKE_LENGTH){
-		error("Snake is already max length in _snake_grow()");
+		debug("Snake is already max length in _snake_grow()");
 		return -1;
 	}
 
@@ -32,11 +32,11 @@ int _snake_grow(struct game_board * board, int snake_id, position_t *new_head) {
 
 int _snake_move(struct game_board *board, int snake_id, position_t *new_head) {
 	if (!board || !board->cells || !new_head){
-		error("NULL pointer passed to snake/_snake_move()");
+		debug("NULL pointer passed to snake/_snake_move()");
 		return -1;
 	}
 	if (snake_id < 0 || snake_id > board->max_snakes){
-		error("Invalid snake_id passed into snake/_snake_move()");
+		debug("Invalid snake_id passed into snake/_snake_move()");
 		return -1;
 	}
 
@@ -59,19 +59,19 @@ int _snake_move(struct game_board *board, int snake_id, position_t *new_head) {
 int snake_set_direction(snake_t *snake, direction_t dir) {
 	//Input validation
 	if (!snake){
-		error("NULL pointer to snake in snake/snake_set_direction()");
+		debug("NULL pointer to snake in snake/snake_set_direction()");
 		return -1;
 	}
 	if (dir != DIR_UP && dir != DIR_DOWN && dir != DIR_LEFT && dir != DIR_RIGHT) {
-		error("Invalid direction argument in snake/snake_set_direction()");
+		debug("Invalid direction argument in snake/snake_set_direction()");
 		return -1;
 	}
 
 	// Ignore opposite direction
-	if (snake->direction == DIR_UP && dir == DIR_DOWN ||
-		snake->direction == DIR_DOWN && dir == DIR_UP ||
-		snake->direction == DIR_LEFT && dir == DIR_RIGHT ||
-		snake->direction == DIR_RIGHT && dir == DIR_LEFT) {
+	if ((snake->direction == DIR_UP && dir == DIR_DOWN) ||
+		(snake->direction == DIR_DOWN && dir == DIR_UP) ||
+		(snake->direction == DIR_LEFT && dir == DIR_RIGHT) ||
+		(snake->direction == DIR_RIGHT && dir == DIR_LEFT)) {
 		return 0;
 	}
 
@@ -83,11 +83,11 @@ int snake_set_direction(snake_t *snake, direction_t dir) {
 int snake_advance(struct game_board *board, int snake_id) {
 	//Input validation
 	if (!board || !board->cells){
-		error("NULL pointer to board in snake/snake_advance()");
+		debug("NULL pointer to board in snake/snake_advance()");
 		return -1;
 	}
 	if (snake_id < 0 || snake_id >= board->max_snakes){
-		error("Invalid snake id in snake/snake_advance()");
+		debug("Invalid snake id in snake/snake_advance()");
 		return -1;
 	}
 
@@ -113,7 +113,7 @@ int snake_advance(struct game_board *board, int snake_id) {
 			new_head_position.y = snake->body[1].y;
 			break;
 		default:
-			error("Invalid direction caught in snake/snake_advance()");
+			debug("Invalid direction caught in snake/snake_advance()");
 			return -1;
 	}
 
@@ -121,7 +121,7 @@ int snake_advance(struct game_board *board, int snake_id) {
 	switch (board->cells[new_head_cell_index]) {
 		case CELL_EMPTY:
 			if (_snake_move(board, snake_id, &new_head_position) == -1){
-				error("error thrown from snake/_snake_move() to snake/snake_advance()");
+				debug("error thrown from snake/_snake_move() to snake/snake_advance()");
 				return -1;
 			}
 			return 0;
@@ -129,13 +129,13 @@ int snake_advance(struct game_board *board, int snake_id) {
 		case CELL_APPLE:
 			if (snake->length < MAX_SNAKE_LENGTH){
 				if (_snake_grow(board, snake_id, &new_head_position) == -1){
-					error("error thrown from snake/_snake_grow() to snake_advance()");
+					debug("error thrown from snake/_snake_grow() to snake_advance()");
 					return -1;
 				}
 			}
 			else {
 				if (_snake_move(board, snake_id, &new_head_position) == -1){
-					error("error thrown from snake/_snake_move() to snake_advance()");
+					debug("error thrown from snake/_snake_move() to snake_advance()");
 					return -1;
 				}
 			}
@@ -152,12 +152,12 @@ int snake_advance(struct game_board *board, int snake_id) {
 		case CELL_SNAKE_6:
 		case CELL_SNAKE_7:
 			if (board_remove_snake(board, snake_id) == -1){
-				error("error thrown from game_board/board_remove_snake() to snake_advance()");
+				debug("error thrown from game_board/board_remove_snake() to snake_advance()");
 				return -1;
 			}
 			return 1;
 	}
 
-	error("Reached end unexpectedly in snake/snake_advance()");
+	debug("Reached end unexpectedly in snake/snake_advance()");
 	return -1;
 }
