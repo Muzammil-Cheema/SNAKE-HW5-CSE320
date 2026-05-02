@@ -129,6 +129,7 @@ int board_add_snake(game_board_t *board, int *out_id) {
 		if (board->snakes[i].alive == 0) {
 			*out_id = board->snakes[i].id;
 			found_snake = true;
+			break;
 		}
 	}
 	if (!found_snake) {
