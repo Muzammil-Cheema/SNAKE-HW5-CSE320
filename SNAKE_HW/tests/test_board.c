@@ -58,9 +58,9 @@ void print_board_to_stderr(const game_board_t *board, const char *label) {
 Test(board_suite, init_sets_expected_state) {
 	game_board_t board = {0};
 	int ret = board_init(&board, 20, 4, 42);
-	print_board_to_stderr(&board, "init_sets_expected_state after board_init");
 
 	cr_assert_eq(ret, 0, "board_init should succeed with valid arguments");
+	print_board_to_stderr(&board, "init_sets_expected_state after board_init");
 	cr_assert_eq(board.size, 20);
 	cr_assert_eq(board.max_snakes, 4);
 	cr_assert_eq(board.num_snakes, 0);
@@ -147,6 +147,8 @@ Test(board_suite, place_apple_uses_the_only_empty_cell) {
 			cr_assert_eq(board.cells[cell_index(&board, x, y)], CELL_WALL);
 		}
 	}
+	print_board_to_stderr(&board, "place_apple_uses_the_only_empty_cell after filling board");
+
 
 	board_free(&board);
 }
@@ -190,6 +192,8 @@ Test(board_suite, add_and_remove_snakes) {
 	cr_assert_eq(board.snakes[1].body[0].y, start1.y);
 	cr_assert_eq(board.cells[cell_index(&board, start1.x, start1.y)], CELL_SNAKE_1);
 
+	print_board_to_stderr(&board, "add_and_remove_snakes after adding two snakes");
+
 	ret = board_remove_snake(&board, 0);
 	cr_assert_eq(ret, 0);
 	cr_assert_eq(board.num_snakes, 1);
@@ -203,6 +207,8 @@ Test(board_suite, add_and_remove_snakes) {
 	cr_assert_eq(board.snakes[1].alive, 0);
 	cr_assert_eq(board.snakes[1].length, 0);
 	cr_assert_eq(board.cells[cell_index(&board, start1.x, start1.y)], CELL_EMPTY);
+
+	print_board_to_stderr(&board, "add_and_remove_snakes after removing both snakes");
 
 	board_free(&board);
 }
@@ -226,6 +232,7 @@ Test(board_suite, add_snake_fails_when_full) {
 	cr_assert_eq(board.num_snakes, 2);
 	cr_assert_eq(board_add_snake(&board, &snake_id), -1);
 	cr_assert_eq(board.num_snakes, 2);
+	print_board_to_stderr(&board, "add_snake_fails_when_full after trying to add more than max snakes");
 
 	board_free(&board);
 }
@@ -246,6 +253,8 @@ Test(board_suite, remove_snake_rejects_invalid_ids) {
 	cr_assert_eq(board_add_snake(&board, &snake_id), 0);
 	cr_assert_eq(board_remove_snake(&board, snake_id), 0);
 	cr_assert_eq(board_remove_snake(&board, snake_id), -1);
+
+	print_board_to_stderr(&board, "remove_snake_rejects_invalid_ids where board should be empty");
 
 	board_free(&board);
 }
