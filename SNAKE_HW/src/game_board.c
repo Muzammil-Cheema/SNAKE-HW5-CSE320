@@ -127,7 +127,7 @@ int board_add_snake(game_board_t *board, int *out_id) {
 	bool found_snake = false;
 	for (int i = 0; i < board->max_snakes; i++) {
 		if (board->snakes[i].alive == 0) {
-			out_id = &board->snakes[i].id;
+			*out_id = board->snakes[i].id;
 			found_snake = true;
 		}
 	}
