@@ -43,7 +43,7 @@ int board_init(game_board_t *board, int size, int max_snakes, unsigned int seed)
 	board->rng_state = seed;
 
 	if (board_place_apple(board) != 0){
-		debug("error thrown from game_baord/board_place_apple() to game_board/board_init()");
+		debug("error thrown from game_board/board_place_apple() to game_board/board_init()");
 	}
 	return 0;
 }
@@ -81,8 +81,10 @@ int board_place_apple(game_board_t *board) {
 		if (board->cells[i] == CELL_EMPTY)
 			empty_count++;
 	}
-	if (empty_count == 0)
+	if (empty_count == 0){
+		debug("No empty cells left to place apple in game_board/board_place_apple()");
 		return -1;
+	}
 
 	unsigned int random = board_random(board);
 	if (random == 50000){
