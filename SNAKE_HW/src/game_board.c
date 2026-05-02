@@ -41,6 +41,7 @@ int board_init(game_board_t *board, int size, int max_snakes, unsigned int seed)
 	}
 	board->size = size;
 	board->num_snakes = 0;
+	board->max_snakes = max_snakes;
 	board->rng_state = seed;
 
 	if (board_place_apple(board) != 0){
