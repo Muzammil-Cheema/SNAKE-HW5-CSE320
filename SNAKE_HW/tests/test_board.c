@@ -1,4 +1,5 @@
 #include <criterion/criterion.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "game_board.h"
@@ -28,9 +29,36 @@ void assert_border_walls(const game_board_t *board) {
 	}
 }
 
+void print_board_to_stderr(const game_board_t *board, const char *label) {
+	fprintf(stderr, "\n=== %s ===\n", label);
+	fprintf(stderr, "size=%d apple=(%d,%d) num_snakes=%d\n",
+	        board->size, board->apple.x, board->apple.y, board->num_snakes);
+
+	for (int y = 0; y < board->size; y++) {
+		for (int x = 0; x < board->size; x++) {
+			cell_t cell = board->cells[cell_index(board, x, y)];
+			char symbol = '?';
+
+			if (cell == CELL_EMPTY) {
+				symbol = '.';
+			} else if (cell == CELL_WALL) {
+				symbol = '#';
+			} else if (cell == CELL_APPLE) {
+				symbol = 'A';
+			} else if (cell >= CELL_SNAKE_0 && cell <= CELL_SNAKE_7) {
+				symbol = (char)('0' + (cell - CELL_SNAKE_0));
+			}
+
+			fprintf(stderr, "%c ", symbol);
+		}
+		fprintf(stderr, "\n");
+	}
+}
+
 Test(board_suite, init_sets_expected_state) {
 	game_board_t board = {0};
 	int ret = board_init(&board, 20, 4, 42);
+	print_board_to_stderr(&board, "init_sets_expected_state after board_init");
 
 	cr_assert_eq(ret, 0, "board_init should succeed with valid arguments");
 	cr_assert_eq(board.size, 20);
@@ -79,6 +107,8 @@ Test(board_suite, place_apple_is_deterministic) {
 
 	cr_assert_eq(ret1, 0);
 	cr_assert_eq(ret2, 0);
+	print_board_to_stderr(&first, "place_apple_is_deterministic first");
+	print_board_to_stderr(&second, "place_apple_is_deterministic second");
 	cr_assert_eq(first.apple.x, second.apple.x);
 	cr_assert_eq(first.apple.y, second.apple.y);
 	cr_assert_eq(memcmp(first.cells, second.cells, (size_t)first.size * (size_t)first.size * sizeof(cell_t)), 0, "Boards initialized with the same seed should match exactly");
@@ -92,6 +122,7 @@ Test(board_suite, place_apple_uses_the_only_empty_cell) {
 	int ret = board_init(&board, 10, 4, 7);
 
 	cr_assert_eq(ret, 0);
+	print_board_to_stderr(&board, "place_apple_uses_the_only_empty_cell after board_init");
 
 	for (int y = 1; y < board.size - 1; y++) {
 		for (int x = 1; x < board.size - 1; x++) {
@@ -129,6 +160,7 @@ Test(board_suite, add_and_remove_snakes) {
 	position_t start1 = make_position((3 * board.size) / 4, board.size / 4);
 
 	cr_assert_eq(ret, 0);
+	print_board_to_stderr(&board, "add_and_remove_snakes after board_init");
 	board.cells[cell_index(&board, start0.x, start0.y)] = CELL_EMPTY;
 	board.cells[cell_index(&board, start1.x, start1.y)] = CELL_EMPTY;
 
@@ -183,6 +215,7 @@ Test(board_suite, add_snake_fails_when_full) {
 	position_t start1 = make_position((3 * board.size) / 4, board.size / 4);
 
 	cr_assert_eq(ret, 0);
+	print_board_to_stderr(&board, "add_snake_fails_when_full after board_init");
 	board.cells[cell_index(&board, start0.x, start0.y)] = CELL_EMPTY;
 	board.cells[cell_index(&board, start1.x, start1.y)] = CELL_EMPTY;
 
@@ -204,6 +237,7 @@ Test(board_suite, remove_snake_rejects_invalid_ids) {
 	position_t start0 = make_position(board.size / 4, board.size / 4);
 
 	cr_assert_eq(ret, 0);
+	print_board_to_stderr(&board, "remove_snake_rejects_invalid_ids after board_init");
 	cr_assert_eq(board_remove_snake(&board, -1), -1);
 	cr_assert_eq(board_remove_snake(&board, MAX_PLAYERS), -1);
 	cr_assert_eq(board_remove_snake(&board, 5), -1);
