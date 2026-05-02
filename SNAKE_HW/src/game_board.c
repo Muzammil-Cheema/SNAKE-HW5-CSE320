@@ -184,7 +184,7 @@ int board_add_snake(game_board_t *board, int *out_id) {
 }
 
 int board_remove_snake(game_board_t *board, int snake_id) {
-	if (!board || snake_id >= board->num_snakes || snake_id < 0 || !board->cells){
+	if (!board || snake_id >= board->max_snakes || snake_id < 0 || !board->cells){
 		debug("invalid input in game_board/board_remove_snake()");
 		return -1;
 	}
