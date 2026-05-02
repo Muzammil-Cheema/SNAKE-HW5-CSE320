@@ -19,7 +19,7 @@ int board_init(game_board_t *board, int size, int max_snakes, unsigned int seed)
 	}
 
 	//Initialize cells
-	board->cells = calloc(size * size, sizeof(cell_t) * size * size);	//Use calloc to set all cells empty
+	board->cells = calloc(size * size, sizeof(cell_t));	//Use calloc to set all cells empty
 	if (!board->cells) {
 		debug("malloc failed for cells array in game_board/board_init()");
 		return -1;
@@ -78,8 +78,11 @@ int board_place_apple(game_board_t *board) {
 
 	unsigned int empty_count = 0;
 	for (int i = 0; i < board->size * board->size; i++) {
-		if (board->cells[i] == CELL_EMPTY)
+//		debug("checking for empty cell");
+		if (board->cells[i] == CELL_EMPTY){
 			empty_count++;
+//			debug("empty cell found");
+		}
 	}
 	if (empty_count == 0){
 		debug("No empty cells left to place apple in game_board/board_place_apple()");
