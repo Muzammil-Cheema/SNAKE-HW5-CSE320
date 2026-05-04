@@ -26,3 +26,6 @@ __pycache__/
 .venv/
 
 compile_comamnds.json
+
+#Makefile
+Makefile
