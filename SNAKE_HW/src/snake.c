@@ -14,16 +14,20 @@ int _snake_grow(struct game_board * board, int snake_id, position_t *new_head) {
 		return -1;
 	}
 
+//	debug("Input validation passed");
+
 	snake_t *snake = &board->snakes[snake_id];
 	if (snake->length == MAX_SNAKE_LENGTH){
 		debug("Snake is already max length in _snake_grow()");
-		return -1;
+		return 1;
 	}
 
+//	debug("Before body shift");
 	//Body shift
-	for (int i = snake->length-1; i >= 0; i++){
+	for (int i = snake->length-1; i >= 0; i--){
 		snake->body[i+1] = snake->body[i];
 	}
+//	debug("After body shift");
 	snake->body[0] = *new_head;
 	snake->length++;
 	board->cells[(new_head->y) * (board->size) + (new_head->x)] = CELL_SNAKE_0 + snake_id;
@@ -39,6 +43,7 @@ int _snake_move(struct game_board *board, int snake_id, position_t *new_head) {
 		debug("Invalid snake_id passed into snake/_snake_move()");
 		return -1;
 	}
+//	debug("Input validation passed for _snake_move()");
 
 	//Set board cells
 	snake_t *snake = &board->snakes[snake_id];
@@ -47,11 +52,21 @@ int _snake_move(struct game_board *board, int snake_id, position_t *new_head) {
 	int head_cell_index = new_head->y * board->size + new_head->x;
 	board->cells[head_cell_index] = CELL_SNAKE_0 + snake_id;
 
-	//Set snake attributes
-	for (int i = 1; i <= snake->length-1; i++) {
+//	for (int i = 0; i < snake->length; i++) {
+//		debug("Snake body positions: (%d, %d)", snake->body[i].x, snake->body[i].y);
+//	}
+
+	//Set snake body
+	for (int i = snake->length-1; i > 0; i--) {
 		snake->body[i] = snake->body[i-1];
 	}
 	snake->body[0] = *new_head;
+//	debug("=============================");
+//	for (int i = 0; i < snake->length; i++) {
+//		debug("Snake body positions: (%d, %d)", snake->body[i].x, snake->body[i].y);
+//	}
+//	debug("=============================");
+
 
 	return 0;
 }
@@ -105,12 +120,12 @@ int snake_advance(struct game_board *board, int snake_id) {
 			new_head_position.y = snake->body[0].y + 1;
 			break;
 		case DIR_LEFT:
-			new_head_position.x = snake->body[1].x - 1;
-			new_head_position.y = snake->body[1].y;
+			new_head_position.x = snake->body[0].x - 1;
+			new_head_position.y = snake->body[0].y;
 			break;
 		case DIR_RIGHT:
-			new_head_position.x = snake->body[1].x + 1;
-			new_head_position.y = snake->body[1].y;
+			new_head_position.x = snake->body[0].x + 1;
+			new_head_position.y = snake->body[0].y;
 			break;
 		default:
 			debug("Invalid direction caught in snake/snake_advance()");
@@ -118,6 +133,7 @@ int snake_advance(struct game_board *board, int snake_id) {
 	}
 
 	int new_head_cell_index = new_head_position.y * board->size + new_head_position.x;
+//	debug("new_head_cell_index: %d", new_head_cell_index);
 	switch (board->cells[new_head_cell_index]) {
 		case CELL_EMPTY:
 			if (_snake_move(board, snake_id, &new_head_position) == -1){
@@ -128,12 +144,14 @@ int snake_advance(struct game_board *board, int snake_id) {
 
 		case CELL_APPLE:
 			if (snake->length < MAX_SNAKE_LENGTH){
+//				debug("Run _snake_grow()");
 				if (_snake_grow(board, snake_id, &new_head_position) == -1){
 					debug("error thrown from snake/_snake_grow() to snake_advance()");
 					return -1;
 				}
 			}
 			else {
+//				debug("Run _snake_move()");
 				if (_snake_move(board, snake_id, &new_head_position) == -1){
 					debug("error thrown from snake/_snake_move() to snake_advance()");
 					return -1;
