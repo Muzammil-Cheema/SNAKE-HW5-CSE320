@@ -1,13 +1,10 @@
 #include <criterion/criterion.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "game_board.h"
 #include "global.h"
 
-int cell_index(const game_board_t *board, int x, int y) {
-	return y * board->size + x;
-}
+extern int _cell_index(const game_board_t *board, int x, int y);
 
 position_t make_position(int x, int y) {
 	position_t pos;
@@ -19,7 +16,7 @@ position_t make_position(int x, int y) {
 void assert_border_walls(const game_board_t *board) {
 	for (int y = 0; y < board->size; y++) {
 		for (int x = 0; x < board->size; x++) {
-			cell_t cell = board->cells[cell_index(board, x, y)];
+			cell_t cell = board->cells[_cell_index(board, x, y)];
 			if (x == 0 || y == 0 || x == board->size - 1 || y == board->size - 1) {
 				cr_assert_eq(cell, CELL_WALL, "Border cell (%d, %d) should be a wall", x, y);
 			} else {
@@ -36,7 +33,7 @@ void print_board_to_stderr(const game_board_t *board, const char *label) {
 
 	for (int y = 0; y < board->size; y++) {
 		for (int x = 0; x < board->size; x++) {
-			cell_t cell = board->cells[cell_index(board, x, y)];
+			cell_t cell = board->cells[_cell_index(board, x, y)];
 			char symbol = '?';
 
 			if (cell == CELL_EMPTY) {
@@ -46,7 +43,15 @@ void print_board_to_stderr(const game_board_t *board, const char *label) {
 			} else if (cell == CELL_APPLE) {
 				symbol = 'A';
 			} else if (cell >= CELL_SNAKE_0 && cell <= CELL_SNAKE_7) {
-				symbol = (char)('0' + (cell - CELL_SNAKE_0));
+				int snake_id = cell - CELL_SNAKE_0;
+				symbol = (char)('0' + snake_id);
+				if (snake_id >= 0 && snake_id < MAX_PLAYERS) {
+					const snake_t *snake = &board->snakes[snake_id];
+					if (snake->alive && snake->length > 0 &&
+					    snake->body[0].x == x && snake->body[0].y == y) {
+						symbol = (char)('a' + snake_id);
+					}
+				}
 			}
 
 			fprintf(stderr, "%c ", symbol);
@@ -71,7 +76,7 @@ Test(board_suite, init_sets_expected_state) {
 	cr_assert_gt(board.apple.y, 0);
 	cr_assert_lt(board.apple.x, board.size - 1);
 	cr_assert_lt(board.apple.y, board.size - 1);
-	cr_assert_eq(board.cells[cell_index(&board, board.apple.x, board.apple.y)], CELL_APPLE);
+	cr_assert_eq(board.cells[_cell_index(&board, board.apple.x, board.apple.y)], CELL_APPLE);
 
 	int apple_count = 0;
 	for (int i = 0; i < board.size * board.size; i++) {
@@ -126,25 +131,25 @@ Test(board_suite, place_apple_uses_the_only_empty_cell) {
 
 	for (int y = 1; y < board.size - 1; y++) {
 		for (int x = 1; x < board.size - 1; x++) {
-			board.cells[cell_index(&board, x, y)] = CELL_WALL;
+			board.cells[_cell_index(&board, x, y)] = CELL_WALL;
 		}
 	}
 
 	position_t target = make_position(4, 4);
-	board.cells[cell_index(&board, target.x, target.y)] = CELL_EMPTY;
+	board.cells[_cell_index(&board, target.x, target.y)] = CELL_EMPTY;
 
 	ret = board_place_apple(&board);
 	cr_assert_eq(ret, 0);
 	cr_assert_eq(board.apple.x, target.x);
 	cr_assert_eq(board.apple.y, target.y);
-	cr_assert_eq(board.cells[cell_index(&board, target.x, target.y)], CELL_APPLE);
+	cr_assert_eq(board.cells[_cell_index(&board, target.x, target.y)], CELL_APPLE);
 
 	for (int y = 1; y < board.size - 1; y++) {
 		for (int x = 1; x < board.size - 1; x++) {
 			if (x == target.x && y == target.y) {
 				continue;
 			}
-			cr_assert_eq(board.cells[cell_index(&board, x, y)], CELL_WALL);
+			cr_assert_eq(board.cells[_cell_index(&board, x, y)], CELL_WALL);
 		}
 	}
 	print_board_to_stderr(&board, "place_apple_uses_the_only_empty_cell after filling board");
@@ -163,8 +168,8 @@ Test(board_suite, add_and_remove_snakes) {
 
 	cr_assert_eq(ret, 0);
 	print_board_to_stderr(&board, "add_and_remove_snakes after board_init");
-	board.cells[cell_index(&board, start0.x, start0.y)] = CELL_EMPTY;
-	board.cells[cell_index(&board, start1.x, start1.y)] = CELL_EMPTY;
+	board.cells[_cell_index(&board, start0.x, start0.y)] = CELL_EMPTY;
+	board.cells[_cell_index(&board, start1.x, start1.y)] = CELL_EMPTY;
 
 	ret = board_add_snake(&board, &snake_id0);
 	cr_assert_eq(ret, 0);
@@ -178,7 +183,7 @@ Test(board_suite, add_and_remove_snakes) {
 	cr_assert_eq(board.snakes[0].next_direction, DIR_RIGHT);
 	cr_assert_eq(board.snakes[0].body[0].x, start0.x);
 	cr_assert_eq(board.snakes[0].body[0].y, start0.y);
-	cr_assert_eq(board.cells[cell_index(&board, start0.x, start0.y)], CELL_SNAKE_0);
+	cr_assert_eq(board.cells[_cell_index(&board, start0.x, start0.y)], CELL_SNAKE_0);
 
 	ret = board_add_snake(&board, &snake_id1);
 	cr_assert_eq(ret, 0);
@@ -191,7 +196,7 @@ Test(board_suite, add_and_remove_snakes) {
 	cr_assert_eq(board.snakes[1].next_direction, DIR_RIGHT);
 	cr_assert_eq(board.snakes[1].body[0].x, start1.x);
 	cr_assert_eq(board.snakes[1].body[0].y, start1.y);
-	cr_assert_eq(board.cells[cell_index(&board, start1.x, start1.y)], CELL_SNAKE_1);
+	cr_assert_eq(board.cells[_cell_index(&board, start1.x, start1.y)], CELL_SNAKE_1);
 
 	print_board_to_stderr(&board, "add_and_remove_snakes after adding two snakes");
 
@@ -200,14 +205,14 @@ Test(board_suite, add_and_remove_snakes) {
 	cr_assert_eq(board.num_snakes, 1);
 	cr_assert_eq(board.snakes[0].alive, 0);
 	cr_assert_eq(board.snakes[0].length, 0);
-	cr_assert_eq(board.cells[cell_index(&board, start0.x, start0.y)], CELL_EMPTY);
+	cr_assert_eq(board.cells[_cell_index(&board, start0.x, start0.y)], CELL_EMPTY);
 
 	ret = board_remove_snake(&board, 1);
 	cr_assert_eq(ret, 0);
 	cr_assert_eq(board.num_snakes, 0);
 	cr_assert_eq(board.snakes[1].alive, 0);
 	cr_assert_eq(board.snakes[1].length, 0);
-	cr_assert_eq(board.cells[cell_index(&board, start1.x, start1.y)], CELL_EMPTY);
+	cr_assert_eq(board.cells[_cell_index(&board, start1.x, start1.y)], CELL_EMPTY);
 
 	print_board_to_stderr(&board, "add_and_remove_snakes after removing both snakes");
 
@@ -223,8 +228,8 @@ Test(board_suite, add_snake_fails_when_full) {
 
 	cr_assert_eq(ret, 0);
 	print_board_to_stderr(&board, "add_snake_fails_when_full after board_init");
-	board.cells[cell_index(&board, start0.x, start0.y)] = CELL_EMPTY;
-	board.cells[cell_index(&board, start1.x, start1.y)] = CELL_EMPTY;
+	board.cells[_cell_index(&board, start0.x, start0.y)] = CELL_EMPTY;
+	board.cells[_cell_index(&board, start1.x, start1.y)] = CELL_EMPTY;
 
 	cr_assert_eq(board_add_snake(&board, &snake_id), 0);
 	cr_assert_eq(snake_id, 0);
@@ -250,7 +255,7 @@ Test(board_suite, remove_snake_rejects_invalid_ids) {
 	cr_assert_eq(board_remove_snake(&board, MAX_PLAYERS), -1);
 	cr_assert_eq(board_remove_snake(&board, 5), -1);
 
-	board.cells[cell_index(&board, start0.x, start0.y)] = CELL_EMPTY;
+	board.cells[_cell_index(&board, start0.x, start0.y)] = CELL_EMPTY;
 	cr_assert_eq(board_add_snake(&board, &snake_id), 0);
 	cr_assert_eq(board_remove_snake(&board, snake_id), 0);
 	cr_assert_eq(board_remove_snake(&board, snake_id), -1);
