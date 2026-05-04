@@ -183,6 +183,11 @@ int board_add_snake(game_board_t *board, int *out_id) {
 	return 0;
 }
 
+
+int _cell_index(const game_board_t *board, int x, int y) {
+	return y * board->size + x;
+}
+
 int board_remove_snake(game_board_t *board, int snake_id) {
 	if (!board || snake_id >= board->max_snakes || snake_id < 0 || !board->cells){
 		debug("invalid input in game_board/board_remove_snake()");
@@ -195,9 +200,15 @@ int board_remove_snake(game_board_t *board, int snake_id) {
 	}
 
 	//Clear board cells where snake existed
-	for (int i = 0; i < board->size * board->size; i++) {
-		if (board->cells[i] == (cell_t) (CELL_SNAKE_0 + snake_id))
-			board->cells[i] = CELL_EMPTY;
+//	for (int i = 0; i < board->size * board->size; i++) {
+//		if (board->cells[i] == (cell_t) (CELL_SNAKE_0 + snake_id))
+//			board->cells[i] = CELL_EMPTY;
+//	}
+
+	snake_t *snake = &(board->snakes[snake_id]);
+
+	for (int i = 0; i < snake->length; i++) {
+		board->cells[_cell_index(board, snake->body[i].x, snake->body[i].y)] = CELL_EMPTY;
 	}
 	board->snakes[snake_id].alive = 0;
 	board->snakes[snake_id].length = 0;
@@ -220,7 +231,7 @@ int board_tick(game_board_t *board) {
 				return -1;
 			}
 			else {
-				debug("snake %d %s", board->snakes[i].id, ret == 0 ? " is alive and well" : (ret == 1 ? "snake just disintegrated bruz" : "snake has big belly"));
+				debug("snake %d %s", board->snakes[i].id, ret == 0 ? "is alive and well" : (ret == 1 ? "snake just disintegrated bruz" : "snake has big belly"));
 			}
 		}
 	}
