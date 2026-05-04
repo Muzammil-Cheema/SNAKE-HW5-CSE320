@@ -27,5 +27,5 @@ __pycache__/
 
 compile_comamnds.json
 
-#Makefile
+# Keep the tracked Makefile from appearing in local status.
 Makefile
