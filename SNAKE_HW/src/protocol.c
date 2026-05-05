@@ -16,7 +16,7 @@ int protocol_serialize_welcome(uint8_t *buf, size_t buf_len, int player_id, int 
 	buf[1] = (uint8_t)player_id;
 	buf[2] = (uint8_t)board_size;
 	buf[3] = (uint8_t)max_players;
-	return 0;
+	return 4;
 }
 
 int protocol_serialize_game_state(uint8_t *buf, size_t buf_len, const game_board_t *board) {
@@ -69,7 +69,7 @@ int protocol_serialize_game_state(uint8_t *buf, size_t buf_len, const game_board
 		}
 	}
 
-	return 0;
+	return (int)buf_off;
 }
 
 int protocol_serialize_dead(uint8_t *buf, size_t buf_len, int player_id) {
@@ -80,7 +80,7 @@ int protocol_serialize_dead(uint8_t *buf, size_t buf_len, int player_id) {
 
 	buf[0] = 0x30;
 	buf[1] = (uint8_t)player_id;
-	return 0;
+	return 2;
 }
 
 int protocol_serialize_game_over(uint8_t *buf, size_t buf_len, int winner_id) {
@@ -91,7 +91,7 @@ int protocol_serialize_game_over(uint8_t *buf, size_t buf_len, int winner_id) {
 
 	buf[0] = 0x40;
 	buf[1] = (uint8_t)winner_id;
-	return 0;
+	return 2;
 }
 
 int protocol_serialize_error(uint8_t *buf, size_t buf_len, uint8_t error_code) {
@@ -102,7 +102,7 @@ int protocol_serialize_error(uint8_t *buf, size_t buf_len, uint8_t error_code) {
 
 	buf[0] = 0xF0;
 	buf[1] = error_code;
-	return 0;
+	return 2;
 }
 
 int protocol_deserialize_client_msg(const uint8_t *buf, size_t buf_len, uint8_t *out_type, uint8_t *out_payload) {
