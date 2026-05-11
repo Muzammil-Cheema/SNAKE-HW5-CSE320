@@ -100,7 +100,10 @@ int main(int argc, char *argv[]) {
 	if (!max_players_seen)
 		max_players = MAX_PLAYERS_DEFAULT;
 
-	(void) seed;	//Seed is not read yet, so we want to avoid compiler errors
+	(void) seed;	//Some variables are not read yet, so we want to avoid compiler errors
+	(void) port_number;
+	(void) board_size;
+	(void) max_players;
 
 
 

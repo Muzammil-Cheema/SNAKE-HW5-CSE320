@@ -113,9 +113,9 @@ int protocol_deserialize_client_msg(const uint8_t *buf, size_t buf_len, uint8_t 
 
 	uint8_t type = buf[0];
 	uint8_t payload = buf[1];
-	if ((type == 0x01 && payload == 0x00) ||
-		(type == 0x03 && payload == 0x00) ||
-		(type == 0x02 && (payload >= 0x00 && payload <= 0x03)) ){
+	if ((type == MSG_JOIN && payload == 0x00) ||
+		(type == MSG_LEAVE && payload == 0x00) ||
+		(type == MSG_DIRECTION && (payload >= 0x00 && payload <= 0x03)) ){
 		*out_type = type;
 		*out_payload = payload;
 		return 0;
