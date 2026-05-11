@@ -1,4 +1,3 @@
-
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -8,6 +7,7 @@
 #include <limits.h>
 #include "global.h"
 #include "debug.h"
+#include "server.h"
 
 #define PORT_MIN 1
 #define PORT_MAX UINT16_MAX
@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
 		switch (option) {
 			case 'h':
 				PRINT_USAGE();
-				exit(EXIT_SUCCESS);
+				return EXIT_SUCCESS;
 				break;
 		}
 	}
@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
 				port_number = strtoul(optarg, &end_ptr, 10);
 				if (optarg == end_ptr || *end_ptr != '\0' || errno == ERANGE || port_number > PORT_MAX || port_number < PORT_MIN) {
 					ERR_INVALID_PORT(optarg);
-					exit(EXIT_FAILURE);
+					return EXIT_FAILURE;
 				}
 				port_number_seen = true;
 				break;
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 				board_size = strtoul(optarg, &end_ptr, 10);
 				if (optarg == end_ptr || *end_ptr != '\0' || errno == ERANGE || board_size < BOARD_SIZE_MIN || board_size > BOARD_SIZE_MAX) {
 					ERR_INVALID_BOARD_SIZE(atoi(optarg));
-					exit(EXIT_FAILURE);
+					return EXIT_FAILURE;
 				}
 				board_size_seen = true;
 				break;
@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
 				long temp_seed = strtol(optarg, &end_ptr, 10);
 				if (optarg == end_ptr || *end_ptr != '\0' || errno == ERANGE || temp_seed > SEED_MAX || temp_seed < SEED_MIN) {
 					ERR_MSG("Invalid seed valued parsed %s", optarg);
-					exit(EXIT_FAILURE);
+					return EXIT_FAILURE;
 				}
 				seed = (unsigned int) temp_seed;
 				seed_seen = true;
@@ -73,25 +73,25 @@ int main(int argc, char *argv[]) {
 				max_players = strtoul(optarg, &end_ptr, 10);
 				if (optarg == end_ptr || *end_ptr != '\0' || errno == ERANGE || max_players < MAX_PLAYERS_MIN || max_players > MAX_PLAYERS_MAX) {
 					ERR_INVALID_MAX_PLAYERS(atoi(optarg));
-					exit(EXIT_FAILURE);
+					return EXIT_FAILURE;
 				}
 				max_players_seen = true;
 				break;
 			case '?':
 				ERR_MSG("Unexpected argument or argument missing option during parsing: %c", optopt);
-				exit(EXIT_FAILURE);
+				return EXIT_FAILURE;
 				break;
 		}
 	}
 
 	if (optind < argc) {	// Unexpected additional positional arguments after the ones our getopt reads
 		ERR_MSG("Unexpected extra argument: %s", argv[optind]);
-		exit(EXIT_FAILURE);
+		return EXIT_FAILURE;
 	}
 
 	if (!port_number_seen){
 		ERR_PORT_REQUIRED();
-		exit(EXIT_FAILURE);
+		return EXIT_FAILURE;
 	}
 	if (!board_size_seen)
 		board_size = BOARD_SIZE_DEFAULT;
@@ -100,12 +100,19 @@ int main(int argc, char *argv[]) {
 	if (!max_players_seen)
 		max_players = MAX_PLAYERS_DEFAULT;
 
-	(void) seed;	//Some variables are not read yet, so we want to avoid compiler errors
-	(void) port_number;
-	(void) board_size;
-	(void) max_players;
+	server_t server;
+	if (server_init(&server, port_number, board_size, max_players, seed) == -1){
+		ERR_BIND_FAILED((int)port_number);
+		return EXIT_FAILURE;
+	}
+	PRINT_SERVER_STARTED((int)port_number, (int)board_size, (int)max_players);
+	int ret = server_start(&server);
+	server_cleanup(&server);
 
+	if (ret == -1) {
+		ERR_MSG("Server failed while running");
+		return EXIT_FAILURE;
+	}
 
-
-	return 0;
+	return EXIT_SUCCESS;
 }

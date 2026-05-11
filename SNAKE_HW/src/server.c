@@ -6,10 +6,25 @@
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
+#include <signal.h>
 #include "server.h"
 #include "debug.h"
 #include "global.h"
 #include "protocol.h"
+
+static volatile sig_atomic_t shutdown_requested = 0;
+static volatile sig_atomic_t signal_listen_fd = -1;
+
+static void handle_sigint(int signal_number) {
+	int saved_errno = errno;
+	(void)signal_number;
+
+	shutdown_requested = 1;
+	if (signal_listen_fd >= 0)
+		close((int)signal_listen_fd);
+
+	errno = saved_errno;
+}
 
 int server_init(server_t *server, int port, int board_size, int max_snakes, unsigned int seed) {
 	if (!server) {
@@ -372,11 +387,24 @@ int server_start(server_t *server) {
 
 	int client_fd = -1;
 	int running = -1;
+	struct sigaction sigint_action;
+
+	shutdown_requested = 0;
+	signal_listen_fd = server->listen_fd;
+	memset(&sigint_action, 0, sizeof(sigint_action));
+	sigint_action.sa_handler = handle_sigint;
+	sigemptyset(&sigint_action.sa_mask);
+	if (sigaction(SIGINT, &sigint_action, NULL) < 0){
+		debug("sigaction failed in server/server_start(): %s\n", strerror(errno));
+		signal_listen_fd = -1;
+		return -1;
+	}
 
 	//Create game loop thread
 	pthread_t game_loop_tid;
 	if (pthread_create(&game_loop_tid, NULL, server_game_loop, server) != 0){
 		debug("Thread creation failed for game loop thread in server/server_start()");
+		signal_listen_fd = -1;
 		return -1;
 	}
 
@@ -389,12 +417,28 @@ int server_start(server_t *server) {
 
 		//Accept clients
 		if ((client_fd = accept(server->listen_fd, NULL, NULL)) < 0){
-			debug("accept failed in server/server_start()");
+			int accept_errno = errno;
+
+			if (shutdown_requested){
+				pthread_mutex_lock(&(server->board_mutex));
+				running = 0;
+				server->running = 0;
+				server->listen_fd = -1;
+				pthread_mutex_unlock(&(server->board_mutex));
+				break;
+			}
+
+			if (accept_errno == EINTR || accept_errno == ECONNABORTED){
+				continue;
+			}
+
+			debug("accept failed in server/server_start(): %s\n", strerror(accept_errno));
 			pthread_mutex_lock(&(server->board_mutex));
 			running = 0;
 			server->running = 0;
 			pthread_mutex_unlock(&(server->board_mutex));
 			pthread_join(game_loop_tid, NULL);
+			signal_listen_fd = -1;
 			return -1;
 		}
 
@@ -431,6 +475,7 @@ int server_start(server_t *server) {
 	}
 
 	pthread_join(game_loop_tid, NULL);
+	signal_listen_fd = -1;
 	return 0;
 }
 
@@ -452,8 +497,10 @@ void server_cleanup(server_t *server) {
 			server->client_snake_ids[i] = -1;
 		}
 	}
-	close(server->listen_fd);
-	server->listen_fd = -1;
+	if (server->listen_fd >= 0){
+		close(server->listen_fd);
+		server->listen_fd = -1;
+	}
 	board_free(&(server->board));
 	pthread_mutex_unlock(&(server->board_mutex));
 // ========================================================
