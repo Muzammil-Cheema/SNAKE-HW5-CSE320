@@ -12,19 +12,19 @@
 #include "global.h"
 #include "protocol.h"
 
-//static volatile sig_atomic_t shutdown_requested = 0;
-//static volatile sig_atomic_t signal_listen_fd = -1;
-//
-//static void handle_sigint(int signal_number) {
-//	int saved_errno = errno;
-//	(void)signal_number;
-//
-//	shutdown_requested = 1;
-//	if (signal_listen_fd >= 0)
-//		close((int)signal_listen_fd);
-//
-//	errno = saved_errno;
-//}
+static volatile sig_atomic_t shutdown_requested = 0;
+static volatile sig_atomic_t signal_listen_fd = -1;
+
+static void handle_sigint(int signal_number) {
+	int saved_errno = errno;
+	(void)signal_number;
+
+	shutdown_requested = 1;
+	if (signal_listen_fd >= 0)
+		close((int)signal_listen_fd);
+
+	errno = saved_errno;
+}
 
 // We wanna keep track of detached threads so we only server_cleanup() once all threads are done
 static pthread_mutex_t handler_count_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -61,7 +61,7 @@ int server_init(server_t *server, int port, int board_size, int max_snakes, unsi
 
 	int welcoming_socket_fd = socket(PF_INET, SOCK_STREAM, 0);
 	if (welcoming_socket_fd < 0) {
-		debug("socket() failed in server.c/server_init(): %s\n", strerror(errno));
+		debug("socket() failed in server.c/server_init(): %d\n", errno);
 		return -1;
 	}
 
@@ -73,19 +73,19 @@ int server_init(server_t *server, int port, int board_size, int max_snakes, unsi
 
 	int yes = 1;
 	if (setsockopt(welcoming_socket_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) < 0){
-		debug("setsockopt() failed in server.c/server_init(): %s\n", strerror(errno));
+		debug("setsockopt() failed in server.c/server_init(): %d\n", errno);
 		close(welcoming_socket_fd);
 		return -1;
 	}
 
 	if (bind(welcoming_socket_fd, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
-		debug("bind() failed in server.c/server_init(): %s\n", strerror(errno));
+		debug("bind() failed in server.c/server_init(): %d\n", errno);
 		close(welcoming_socket_fd);
 		return -1;
 	}
 
 	if (listen(welcoming_socket_fd, SOMAXCONN) < 0) {
-		debug("listen() failed in server.c/server_init(): %s\n", strerror(errno));
+		debug("listen() failed in server.c/server_init(): %d\n", errno);
 		close(welcoming_socket_fd);
 		return -1;
 	}
@@ -431,24 +431,24 @@ int server_start(server_t *server) {
 
 	int client_fd = -1;
 	int running = -1;
-//	struct sigaction sigint_action;
+	struct sigaction sigint_action;
 
-//	shutdown_requested = 0;
-//	signal_listen_fd = server->listen_fd;
-//	memset(&sigint_action, 0, sizeof(sigint_action));
-//	sigint_action.sa_handler = handle_sigint;
-//	sigemptyset(&sigint_action.sa_mask);
-//	if (sigaction(SIGINT, &sigint_action, NULL) < 0){
-//		debug("sigaction failed in server/server_start(): %s\n", strerror(errno));
-////		signal_listen_fd = -1;
-//		return -1;
-//	}
+	shutdown_requested = 0;
+	signal_listen_fd = server->listen_fd;
+	memset(&sigint_action, 0, sizeof(sigint_action));
+	sigint_action.sa_handler = handle_sigint;
+	sigemptyset(&sigint_action.sa_mask);
+	if (sigaction(SIGINT, &sigint_action, NULL) < 0){
+		debug("sigaction failed in server/server_start(): %d\n", errno);
+		signal_listen_fd = -1;
+		return -1;
+	}
 
 	//Create game loop thread
 	pthread_t game_loop_tid;
 	if (pthread_create(&game_loop_tid, NULL, server_game_loop, server) != 0){
 		debug("Thread creation failed for game loop thread in server/server_start()");
-//		signal_listen_fd = -1;
+		signal_listen_fd = -1;
 		return -1;
 	}
 
@@ -460,29 +460,29 @@ int server_start(server_t *server) {
 		if (!running) break;
 
 		//Accept clients
-		if ((client_fd = accept(server->listen_fd, NULL, NULL)) < 0){
+		if ((client_fd = accept(signal_listen_fd, NULL, NULL)) < 0){
 			int accept_errno = errno;
 
-//			if (shutdown_requested){
-//				pthread_mutex_lock(&(server->board_mutex));
-//				running = 0;
-//				server->running = 0;
-//				server->listen_fd = -1;
-//				pthread_mutex_unlock(&(server->board_mutex));
-//				break;
-//			}
+			if (shutdown_requested){
+				pthread_mutex_lock(&(server->board_mutex));
+				running = 0;
+				server->running = 0;
+				server->listen_fd = -1;
+				pthread_mutex_unlock(&(server->board_mutex));
+				break;
+			}
 
 			if (accept_errno == EINTR || accept_errno == ECONNABORTED){
 				continue;
 			}
 
-			debug("accept failed in server/server_start(): %s\n", strerror(accept_errno));
+			debug("accept failed in server/server_start(): %d\n", accept_errno);
 			pthread_mutex_lock(&(server->board_mutex));
 			running = 0;
 			server->running = 0;
 			pthread_mutex_unlock(&(server->board_mutex));
 			pthread_join(game_loop_tid, NULL);
-//			signal_listen_fd = -1;
+			signal_listen_fd = -1;
 			return -1;
 		}
 
@@ -521,7 +521,7 @@ int server_start(server_t *server) {
 	}
 
 	pthread_join(game_loop_tid, NULL);
-//	signal_listen_fd = -1;
+	signal_listen_fd = -1;
 	return 0;
 }
 
@@ -579,7 +579,7 @@ int recv_exact(int fd, uint8_t *buf, size_t len) {
 			received += n;
 		}
 		else if (n == -1){
-			debug("recv() failed in recv_exact(): %s\n", strerror(errno));
+			debug("recv() failed in recv_exact(): %d\n", errno);
 			return -1;
 		}
 		else if (n == 0){
@@ -605,7 +605,7 @@ int send_all(int fd, const uint8_t *buf, size_t len) {
 			sent += n;
 		}
 		else if (n == -1){
-			debug("send() failed in send_all(): %s\n", strerror(errno));
+			debug("send() failed in send_all(): %d\n", errno);
 			return -1;
 		}
 		else if (n == 0){
