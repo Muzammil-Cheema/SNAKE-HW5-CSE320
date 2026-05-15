@@ -301,7 +301,7 @@ void *server_client_handler(void *arg) {
 
 	//Change is made to prevent data races during concurrency stress tests
 	//We're currently reserving slots under the assumption WELCOME sends. Under failure, we must free slots after failed send.
-	server->client_fds[slot] = client_fd;
+//	server->client_fds[slot] = -1;
 	server->client_snake_ids[slot] = snake_out_id;
 	pthread_mutex_unlock(&(server->board_mutex));
 // ========================================================
@@ -317,6 +317,9 @@ void *server_client_handler(void *arg) {
 		server->client_snake_ids[slot] = -1;
 		goto cleanup_board;
 	}
+	pthread_mutex_lock(&(server->board_mutex));
+	server->client_fds[slot] = client_fd;
+	pthread_mutex_unlock(&(server->board_mutex));
 
 	loop_start:
 	while(1){
