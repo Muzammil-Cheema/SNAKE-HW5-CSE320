@@ -431,7 +431,7 @@ int server_start(server_t *server) {
 
 	int client_fd = -1;
 	int running = -1;
-	struct sigaction sigint_action;
+//	struct sigaction sigint_action;
 
 //	shutdown_requested = 0;
 //	signal_listen_fd = server->listen_fd;
