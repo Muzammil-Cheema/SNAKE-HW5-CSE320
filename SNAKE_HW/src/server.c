@@ -313,8 +313,8 @@ void *server_client_handler(void *arg) {
 		err = ERR_INVALID_MSG;
 		cleanup = false;
 		pthread_mutex_lock(&(server->board_mutex));
-		server->client_fds[slot] = client_fd;
-		server->client_snake_ids[slot] = snake_out_id;
+		server->client_fds[slot] = -1;
+		server->client_snake_ids[slot] = -1;
 		goto cleanup_board;
 	}
 
