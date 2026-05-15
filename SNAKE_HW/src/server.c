@@ -261,6 +261,8 @@ void *server_client_handler(void *arg) {
 		goto error;
 	}
 
+	//Below code runs after first JOIN only
+
 // ========================================================
 // =============== Mutex LOCK ==========================
 // ========================================================
@@ -290,33 +292,39 @@ void *server_client_handler(void *arg) {
 		goto error;
 	}
 
-	int welcome_ret = protocol_serialize_welcome(welcome_buf, welcome_buf_len, snake_out_id, server->board.size, server->board.max_snakes);
+	if (protocol_serialize_welcome(welcome_buf, welcome_buf_len, snake_out_id, server->board.size, server->board.max_snakes) != 4){
+		debug("invalid welcome protocol serialization in server/server_client_handler()");
+		err = ERR_INVALID_MSG;
+		cleanup = false;
+		goto cleanup_board;
+	}
+
+	//Change is made to prevent data races during concurrency stress tests
+	//We're currently reserving slots under the assumption WELCOME sends. Under failure, we must free slots after failed send.
+	server->client_fds[slot] = client_fd;
+	server->client_snake_ids[slot] = snake_out_id;
 	pthread_mutex_unlock(&(server->board_mutex));
 // ========================================================
 // =============== Mutex UNLOCK ==========================
 // ========================================================
 
-	if (welcome_ret != 4){
-		debug("invalid welcome protocol serialization in server/server_client_handler()");
-		err = ERR_INVALID_MSG;
-		goto cleanup_board;
-	}
+
 	if (send_all(client_fd, welcome_buf, welcome_buf_len) == -1){
 		err = ERR_INVALID_MSG;
+		cleanup = false;
+		pthread_mutex_lock(&(server->board_mutex));
+		server->client_fds[slot] = client_fd;
+		server->client_snake_ids[slot] = snake_out_id;
 		goto cleanup_board;
 	}
-	pthread_mutex_lock(&(server->board_mutex));
-	server->client_fds[slot] = client_fd;
-	server->client_snake_ids[slot] = snake_out_id;
-	pthread_mutex_unlock(&(server->board_mutex));
-
 
 	loop_start:
 	while(1){
 		if (recv_exact(client_fd, buf, buf_len) == -1){
 			debug("recv_exact() failed for client %d in server/server_client_handler()", client_fd);
 			err = ERR_INVALID_MSG;
-			cleanup = true;
+			cleanup = false;
+			pthread_mutex_lock(&(server->board_mutex));
 			goto cleanup_board;
 		}
 
@@ -351,6 +359,8 @@ void *server_client_handler(void *arg) {
 		}
 	}
 
+	cleanup = false;
+	pthread_mutex_lock(&(server->board_mutex));
 	goto cleanup_board;
 
 	error:	//If we want to send error packet to client. Could result in cleanup code based on "cleanup" boolean variable.
@@ -363,7 +373,7 @@ void *server_client_handler(void *arg) {
 // ========================================================
 // =============== Mutex LOCK ==========================
 // ========================================================
-			pthread_mutex_lock(&(server->board_mutex));
+			if (cleanup) pthread_mutex_lock(&(server->board_mutex));	//Only relock if we come from the "error" label, else mutex should already be locked
 			if (snake_out_id >= 0 && server->board.snakes[snake_out_id].alive == 1)
 				board_remove_snake(&(server->board), snake_out_id);
 			if (slot >= 0) {
