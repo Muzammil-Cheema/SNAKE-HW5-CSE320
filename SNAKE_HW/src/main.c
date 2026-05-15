@@ -29,11 +29,14 @@ int main(int argc, char *argv[]) {
 	int option = 0;
 
 	optind = 1;
-	while ((option = getopt(argc, argv, "h")) != -1){
+	while ((option = getopt(argc, argv, "+p:b:s:m:h")) != -1){
 		switch (option) {
 			case 'h':
 				PRINT_USAGE();
 				return EXIT_SUCCESS;
+				break;
+
+			default:
 				break;
 		}
 	}
