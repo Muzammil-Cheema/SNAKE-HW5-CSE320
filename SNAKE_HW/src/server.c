@@ -11,11 +11,11 @@
 #include "debug.h"
 #include "global.h"
 #include "protocol.h"
-//
+
 static volatile sig_atomic_t shutdown_requested = 0;
 static volatile sig_atomic_t signal_listen_fd = -1;
 
-void handle_sigint(int signal_number) {
+static void handle_sigint(int signal_number) {
 	int saved_errno = errno;
 	(void)signal_number;
 
@@ -26,88 +26,6 @@ void handle_sigint(int signal_number) {
 	errno = saved_errno;
 }
 
-#define TRACKED_FDS_MAX 128
-static pthread_mutex_t accepted_fds_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int accepted_fds[TRACKED_FDS_MAX];
-static int accepted_fds_initialized = 0;
-
-//Track accepted clients (after accept(), before JOIN) to close cleanly for rapid connect+disconnect
-void accepted_fds_init(void) {
-    pthread_mutex_lock(&accepted_fds_mutex);
-
-    if (!accepted_fds_initialized) {
-        for (int i = 0; i < TRACKED_FDS_MAX; i++)
-            accepted_fds[i] = -1;
-        accepted_fds_initialized = 1;
-    }
-
-    pthread_mutex_unlock(&accepted_fds_mutex);
-}
-
-void accepted_fd_add(int fd) {
-    pthread_mutex_lock(&accepted_fds_mutex);
-
-    for (int i = 0; i < TRACKED_FDS_MAX; i++) {
-        if (accepted_fds[i] == -1) {
-            accepted_fds[i] = fd;
-            break;
-        }
-    }
-
-    pthread_mutex_unlock(&accepted_fds_mutex);
-}
-
-void accepted_fd_remove(int fd) {
-    pthread_mutex_lock(&accepted_fds_mutex);
-
-    for (int i = 0; i < TRACKED_FDS_MAX; i++) {
-        if (accepted_fds[i] == fd) {
-            accepted_fds[i] = -1;
-            break;
-        }
-    }
-
-    pthread_mutex_unlock(&accepted_fds_mutex);
-}
-
-void accepted_fds_shutdown_all(void) {
-    pthread_mutex_lock(&accepted_fds_mutex);
-
-    for (int i = 0; i < TRACKED_FDS_MAX; i++) {
-        if (accepted_fds[i] >= 0)
-            shutdown(accepted_fds[i], SHUT_RDWR);
-    }
-
-    pthread_mutex_unlock(&accepted_fds_mutex);
-}
-
-// We wanna keep track of detached threads so we only server_cleanup() once all threads are done
-static pthread_mutex_t handler_count_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t handler_count_cond = PTHREAD_COND_INITIALIZER;
-static int active_handlers = 0;
-
-void handler_started() {
-    pthread_mutex_lock(&handler_count_mutex);
-    active_handlers++;
-    pthread_mutex_unlock(&handler_count_mutex);
-}
-
-void handler_finished() {
-    pthread_mutex_lock(&handler_count_mutex);
-    active_handlers--;
-    if (active_handlers == 0)
-        pthread_cond_broadcast(&handler_count_cond);
-    pthread_mutex_unlock(&handler_count_mutex);
-}
-
-void wait_for_handlers() {
-    pthread_mutex_lock(&handler_count_mutex);
-    while (active_handlers > 0)
-        pthread_cond_wait(&handler_count_cond, &handler_count_mutex);
-    pthread_mutex_unlock(&handler_count_mutex);
-}
-
-
 int server_init(server_t *server, int port, int board_size, int max_snakes, unsigned int seed) {
 	if (!server) {
 		debug("server argument is NULL in server/server_init()");
@@ -116,7 +34,7 @@ int server_init(server_t *server, int port, int board_size, int max_snakes, unsi
 
 	int welcoming_socket_fd = socket(PF_INET, SOCK_STREAM, 0);
 	if (welcoming_socket_fd < 0) {
-		debug("socket() failed in server.c/server_init(): %d\n", errno);
+		debug("socket() failed in server.c/server_init(): %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -128,19 +46,19 @@ int server_init(server_t *server, int port, int board_size, int max_snakes, unsi
 
 	int yes = 1;
 	if (setsockopt(welcoming_socket_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) < 0){
-		debug("setsockopt() failed in server.c/server_init(): %d\n", errno);
+		debug("setsockopt() failed in server.c/server_init(): %s\n", strerror(errno));
 		close(welcoming_socket_fd);
 		return -1;
 	}
 
 	if (bind(welcoming_socket_fd, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
-		debug("bind() failed in server.c/server_init(): %d\n", errno);
+		debug("bind() failed in server.c/server_init(): %s\n", strerror(errno));
 		close(welcoming_socket_fd);
 		return -1;
 	}
 
 	if (listen(welcoming_socket_fd, SOMAXCONN) < 0) {
-		debug("listen() failed in server.c/server_init(): %d\n", errno);
+		debug("listen() failed in server.c/server_init(): %s\n", strerror(errno));
 		close(welcoming_socket_fd);
 		return -1;
 	}
@@ -164,9 +82,6 @@ int server_init(server_t *server, int port, int board_size, int max_snakes, unsi
 		server->client_snake_ids[i] = -1;
 	}
 	server->running = 1;
-
-	accepted_fds_init();
-
 
 	return 0;
 }
@@ -346,8 +261,6 @@ void *server_client_handler(void *arg) {
 		goto error;
 	}
 
-	//Below code runs after first JOIN only
-
 // ========================================================
 // =============== Mutex LOCK ==========================
 // ========================================================
@@ -377,42 +290,33 @@ void *server_client_handler(void *arg) {
 		goto error;
 	}
 
-	if (protocol_serialize_welcome(welcome_buf, welcome_buf_len, snake_out_id, server->board.size, server->board.max_snakes) != 4){
-		debug("invalid welcome protocol serialization in server/server_client_handler()");
-		err = ERR_INVALID_MSG;
-		cleanup = false;
-		goto cleanup_board;
-	}
-
-	//Change is made to prevent data races during concurrency stress tests
-	//We're currently reserving slots under the assumption WELCOME sends. Under failure, we must free slots after failed send.
-//	server->client_fds[slot] = -1;
-	server->client_snake_ids[slot] = snake_out_id;
+	int welcome_ret = protocol_serialize_welcome(welcome_buf, welcome_buf_len, snake_out_id, server->board.size, server->board.max_snakes);
 	pthread_mutex_unlock(&(server->board_mutex));
 // ========================================================
 // =============== Mutex UNLOCK ==========================
 // ========================================================
 
-
+	if (welcome_ret != 4){
+		debug("invalid welcome protocol serialization in server/server_client_handler()");
+		err = ERR_INVALID_MSG;
+		goto cleanup_board;
+	}
 	if (send_all(client_fd, welcome_buf, welcome_buf_len) == -1){
 		err = ERR_INVALID_MSG;
-		cleanup = false;
-		pthread_mutex_lock(&(server->board_mutex));
-		server->client_fds[slot] = -1;
-		server->client_snake_ids[slot] = -1;
 		goto cleanup_board;
 	}
 	pthread_mutex_lock(&(server->board_mutex));
 	server->client_fds[slot] = client_fd;
+	server->client_snake_ids[slot] = snake_out_id;
 	pthread_mutex_unlock(&(server->board_mutex));
+
 
 	loop_start:
 	while(1){
 		if (recv_exact(client_fd, buf, buf_len) == -1){
 			debug("recv_exact() failed for client %d in server/server_client_handler()", client_fd);
 			err = ERR_INVALID_MSG;
-			cleanup = false;
-			pthread_mutex_lock(&(server->board_mutex));
+			cleanup = true;
 			goto cleanup_board;
 		}
 
@@ -447,8 +351,6 @@ void *server_client_handler(void *arg) {
 		}
 	}
 
-	cleanup = false;
-	pthread_mutex_lock(&(server->board_mutex));
 	goto cleanup_board;
 
 	error:	//If we want to send error packet to client. Could result in cleanup code based on "cleanup" boolean variable.
@@ -461,7 +363,7 @@ void *server_client_handler(void *arg) {
 // ========================================================
 // =============== Mutex LOCK ==========================
 // ========================================================
-			if (cleanup) pthread_mutex_lock(&(server->board_mutex));	//Only relock if we come from the "error" label, else mutex should already be locked
+			pthread_mutex_lock(&(server->board_mutex));
 			if (snake_out_id >= 0 && server->board.snakes[snake_out_id].alive == 1)
 				board_remove_snake(&(server->board), snake_out_id);
 			if (slot >= 0) {
@@ -474,13 +376,8 @@ void *server_client_handler(void *arg) {
 // ========================================================
 
 	cleanup:
-		if (client_fd >= 0){
-			accepted_fd_remove(client_fd);
-			close(client_fd);
-		}
+		if (client_fd >= 0) close(client_fd);
 		free(arg);
-
-	handler_finished();
 	return NULL;
 }
 
@@ -500,7 +397,7 @@ int server_start(server_t *server) {
 	sigint_action.sa_handler = handle_sigint;
 	sigemptyset(&sigint_action.sa_mask);
 	if (sigaction(SIGINT, &sigint_action, NULL) < 0){
-		debug("sigaction failed in server/server_start(): %d\n", errno);
+		debug("sigaction failed in server/server_start(): %s\n", strerror(errno));
 		signal_listen_fd = -1;
 		return -1;
 	}
@@ -521,7 +418,7 @@ int server_start(server_t *server) {
 		if (!running) break;
 
 		//Accept clients
-		if ((client_fd = accept(signal_listen_fd, NULL, NULL)) < 0){
+		if ((client_fd = accept(server->listen_fd, NULL, NULL)) < 0){
 			int accept_errno = errno;
 
 			if (shutdown_requested){
@@ -537,7 +434,7 @@ int server_start(server_t *server) {
 				continue;
 			}
 
-			debug("accept failed in server/server_start(): %d\n", accept_errno);
+			debug("accept failed in server/server_start(): %s\n", strerror(accept_errno));
 			pthread_mutex_lock(&(server->board_mutex));
 			running = 0;
 			server->running = 0;
@@ -570,14 +467,10 @@ int server_start(server_t *server) {
 
 		//Create detached client thread
 		pthread_t tid;
-		accepted_fd_add(client_fd);
-		handler_started();
 		if (pthread_create(&tid, NULL, server_client_handler, client_handler_arg) != 0){
 			debug("pthread_create failed in server/server_start()");
 			close(client_fd);
 			free(client_handler_arg);
-			accepted_fd_remove(client_fd);
-			handler_finished();
 			continue;
 		}
 		pthread_detach(tid);
@@ -599,23 +492,17 @@ void server_cleanup(server_t *server) {
 // ========================================================
 	pthread_mutex_lock(&(server->board_mutex));
 	server->running = 0;
-	if (server->listen_fd >= 0){
-		close(server->listen_fd);
-		server->listen_fd = -1;
-	}
 	for (int i = 0; i < server->board.max_snakes; i++) {
 		if (server->client_fds[i] >= 0) {
-			shutdown(server->client_fds[i], SHUT_RDWR);
+			close(server->client_fds[i]);
 			server->client_fds[i] = -1;
 			server->client_snake_ids[i] = -1;
 		}
 	}
-	pthread_mutex_unlock(&(server->board_mutex));
-
-	//Only clear board once all detached client handlers return. Genius idea to prevent races fr.
-	wait_for_handlers();
-
-	pthread_mutex_lock(&(server->board_mutex));
+	if (server->listen_fd >= 0){
+		close(server->listen_fd);
+		server->listen_fd = -1;
+	}
 	board_free(&(server->board));
 	pthread_mutex_unlock(&(server->board_mutex));
 // ========================================================
@@ -642,7 +529,7 @@ int recv_exact(int fd, uint8_t *buf, size_t len) {
 			received += n;
 		}
 		else if (n == -1){
-			debug("recv() failed in recv_exact(): %d\n", errno);
+			debug("recv() failed in recv_exact(): %s\n", strerror(errno));
 			return -1;
 		}
 		else if (n == 0){
@@ -668,7 +555,7 @@ int send_all(int fd, const uint8_t *buf, size_t len) {
 			sent += n;
 		}
 		else if (n == -1){
-			debug("send() failed in send_all(): %d\n", errno);
+			debug("send() failed in send_all(): %s\n", strerror(errno));
 			return -1;
 		}
 		else if (n == 0){
