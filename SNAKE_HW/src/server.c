@@ -209,7 +209,9 @@ void *server_game_loop(void *arg) {
 		}
 	}
 
+	pthread_mutex_lock(&(server->board_mutex));
 	server->running = 0;
+	pthread_mutex_unlock(&(server->board_mutex));
 	return NULL;
 }
 
@@ -351,13 +353,13 @@ void *server_client_handler(void *arg) {
 
 	goto cleanup_board;
 
-	error:
+	error:	//If we want to send error packet to client. Could result in cleanup code based on "cleanup" boolean variable.
 		if (protocol_serialize_error(buf, buf_len, err) == 2)
 			send_all(client_fd, buf, buf_len);
 		if (cleanup) goto cleanup;
 		else goto loop_start;
 
-	cleanup_board:
+	cleanup_board:		//If we need to cleanup the board as well as client socket
 // ========================================================
 // =============== Mutex LOCK ==========================
 // ========================================================
