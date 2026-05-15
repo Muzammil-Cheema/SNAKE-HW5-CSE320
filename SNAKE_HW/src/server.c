@@ -460,7 +460,7 @@ int server_start(server_t *server) {
 		if (!running) break;
 
 		//Accept clients
-		if ((client_fd = accept(server->listen_fd, NULL, NULL)) < 0){
+		if ((client_fd = accept(signal_listen_fd, NULL, NULL)) < 0){
 			int accept_errno = errno;
 
 			if (shutdown_requested){
@@ -549,6 +549,7 @@ void server_cleanup(server_t *server) {
 	}
 	pthread_mutex_unlock(&(server->board_mutex));
 
+	//Only clear board once all detached client handlers return. Genius idea to prevent races fr.
 	wait_for_handlers();
 
 	pthread_mutex_lock(&(server->board_mutex));
