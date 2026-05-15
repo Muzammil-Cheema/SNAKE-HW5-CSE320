@@ -15,7 +15,7 @@
 static volatile sig_atomic_t shutdown_requested = 0;
 static volatile sig_atomic_t signal_listen_fd = -1;
 
-static void handle_sigint(int signal_number) {
+void handle_sigint(int signal_number) {
 	int saved_errno = errno;
 	(void)signal_number;
 
@@ -24,6 +24,61 @@ static void handle_sigint(int signal_number) {
 		close((int)signal_listen_fd);
 
 	errno = saved_errno;
+}
+
+#define TRACKED_FDS_MAX 128
+static pthread_mutex_t accepted_fds_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int accepted_fds[TRACKED_FDS_MAX];
+static int accepted_fds_initialized = 0;
+
+//Track accepted clients (after accept(), before JOIN) to close cleanly for rapid connect+disconnect
+void accepted_fds_init(void) {
+    pthread_mutex_lock(&accepted_fds_mutex);
+
+    if (!accepted_fds_initialized) {
+        for (int i = 0; i < TRACKED_FDS_MAX; i++)
+            accepted_fds[i] = -1;
+        accepted_fds_initialized = 1;
+    }
+
+    pthread_mutex_unlock(&accepted_fds_mutex);
+}
+
+void accepted_fd_add(int fd) {
+    pthread_mutex_lock(&accepted_fds_mutex);
+
+    for (int i = 0; i < TRACKED_FDS_MAX; i++) {
+        if (accepted_fds[i] == -1) {
+            accepted_fds[i] = fd;
+            break;
+        }
+    }
+
+    pthread_mutex_unlock(&accepted_fds_mutex);
+}
+
+void accepted_fd_remove(int fd) {
+    pthread_mutex_lock(&accepted_fds_mutex);
+
+    for (int i = 0; i < TRACKED_FDS_MAX; i++) {
+        if (accepted_fds[i] == fd) {
+            accepted_fds[i] = -1;
+            break;
+        }
+    }
+
+    pthread_mutex_unlock(&accepted_fds_mutex);
+}
+
+void accepted_fds_shutdown_all(void) {
+    pthread_mutex_lock(&accepted_fds_mutex);
+
+    for (int i = 0; i < TRACKED_FDS_MAX; i++) {
+        if (accepted_fds[i] >= 0)
+            shutdown(accepted_fds[i], SHUT_RDWR);
+    }
+
+    pthread_mutex_unlock(&accepted_fds_mutex);
 }
 
 // We wanna keep track of detached threads so we only server_cleanup() once all threads are done
@@ -109,6 +164,9 @@ int server_init(server_t *server, int port, int board_size, int max_snakes, unsi
 		server->client_snake_ids[i] = -1;
 	}
 	server->running = 1;
+
+	accepted_fds_init();
+
 
 	return 0;
 }
@@ -416,7 +474,10 @@ void *server_client_handler(void *arg) {
 // ========================================================
 
 	cleanup:
-		if (client_fd >= 0) close(client_fd);
+		if (client_fd >= 0){
+			accepted_fd_remove(client_fd);
+			close(client_fd);
+		}
 		free(arg);
 
 	handler_finished();
@@ -509,11 +570,13 @@ int server_start(server_t *server) {
 
 		//Create detached client thread
 		pthread_t tid;
+		accepted_fd_add(client_fd);
 		handler_started();
 		if (pthread_create(&tid, NULL, server_client_handler, client_handler_arg) != 0){
 			debug("pthread_create failed in server/server_start()");
 			close(client_fd);
 			free(client_handler_arg);
+			accepted_fd_remove(client_fd);
 			handler_finished();
 			continue;
 		}
@@ -542,7 +605,7 @@ void server_cleanup(server_t *server) {
 	}
 	for (int i = 0; i < server->board.max_snakes; i++) {
 		if (server->client_fds[i] >= 0) {
-			close(server->client_fds[i]);
+			shutdown(server->client_fds[i], SHUT_RDWR);
 			server->client_fds[i] = -1;
 			server->client_snake_ids[i] = -1;
 		}
