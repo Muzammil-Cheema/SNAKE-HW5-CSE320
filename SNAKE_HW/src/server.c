@@ -26,6 +26,33 @@ static void handle_sigint(int signal_number) {
 	errno = saved_errno;
 }
 
+// We wanna keep track of detached threads so we only server_cleanup() once all threads are done
+static pthread_mutex_t handler_count_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t handler_count_cond = PTHREAD_COND_INITIALIZER;
+static int active_handlers = 0;
+
+void handler_started() {
+    pthread_mutex_lock(&handler_count_mutex);
+    active_handlers++;
+    pthread_mutex_unlock(&handler_count_mutex);
+}
+
+void handler_finished() {
+    pthread_mutex_lock(&handler_count_mutex);
+    active_handlers--;
+    if (active_handlers == 0)
+        pthread_cond_broadcast(&handler_count_cond);
+    pthread_mutex_unlock(&handler_count_mutex);
+}
+
+void wait_for_handlers() {
+    pthread_mutex_lock(&handler_count_mutex);
+    while (active_handlers > 0)
+        pthread_cond_wait(&handler_count_cond, &handler_count_mutex);
+    pthread_mutex_unlock(&handler_count_mutex);
+}
+
+
 int server_init(server_t *server, int port, int board_size, int max_snakes, unsigned int seed) {
 	if (!server) {
 		debug("server argument is NULL in server/server_init()");
@@ -391,6 +418,8 @@ void *server_client_handler(void *arg) {
 	cleanup:
 		if (client_fd >= 0) close(client_fd);
 		free(arg);
+
+	handler_finished();
 	return NULL;
 }
 
@@ -480,10 +509,12 @@ int server_start(server_t *server) {
 
 		//Create detached client thread
 		pthread_t tid;
+		handler_started();
 		if (pthread_create(&tid, NULL, server_client_handler, client_handler_arg) != 0){
 			debug("pthread_create failed in server/server_start()");
 			close(client_fd);
 			free(client_handler_arg);
+			handler_finished();
 			continue;
 		}
 		pthread_detach(tid);
@@ -505,6 +536,10 @@ void server_cleanup(server_t *server) {
 // ========================================================
 	pthread_mutex_lock(&(server->board_mutex));
 	server->running = 0;
+	if (server->listen_fd >= 0){
+		close(server->listen_fd);
+		server->listen_fd = -1;
+	}
 	for (int i = 0; i < server->board.max_snakes; i++) {
 		if (server->client_fds[i] >= 0) {
 			close(server->client_fds[i]);
@@ -512,10 +547,11 @@ void server_cleanup(server_t *server) {
 			server->client_snake_ids[i] = -1;
 		}
 	}
-	if (server->listen_fd >= 0){
-		close(server->listen_fd);
-		server->listen_fd = -1;
-	}
+	pthread_mutex_unlock(&(server->board_mutex));
+
+	wait_for_handlers();
+
+	pthread_mutex_lock(&(server->board_mutex));
 	board_free(&(server->board));
 	pthread_mutex_unlock(&(server->board_mutex));
 // ========================================================
