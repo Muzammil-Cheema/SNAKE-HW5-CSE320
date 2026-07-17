@@ -4,7 +4,7 @@ A systems programming project that implements a multiplayer Snake game server in
 
 ## Project Goals
 
-The goal of this project was to build a real multiplayer game server from the systems layer up. Instead of relying on a web framework, event framework, or high-level runtime, the server directly uses POSIX APIs to manage networking and concurrency.
+The goal of this project was to build a multiplayer game server from the systems layer up. Instead of relying on a web framework, event framework, or high-level runtime, the server directly uses POSIX APIs to manage networking and concurrency.
 
 The project was designed to answer questions such as:
 
